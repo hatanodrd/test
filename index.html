@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ポカヨケ照合システム (作業者ID・外枠フラッシュ・OCRスリム・QR桁数制限対応版)</title>
+  <title>ポカヨケ照合システム (倍率UP・作業者ID・外枠フラッシュ対応版)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
@@ -34,7 +34,7 @@
       position: relative;
     }
 
-    /* ★ 画面外枠フラッシュ演出用オーバーレイ ★ */
+    /* 画面外枠フラッシュ演出用オーバーレイ */
     #borderFlash {
       position: fixed;
       inset: 0;
@@ -165,9 +165,10 @@
       width: 100%;
       height: 100%;
       object-fit: fill;
+      transform-origin: center center;
     }
 
-    /* ★ OCRターゲット枠（スリム版：高さ34px） ★ */
+    /* OCRターゲット枠（スリム版：34px） */
     .ocr-scan-box {
       position: absolute;
       top: 50%;
@@ -208,8 +209,8 @@
       color: #555;
     }
     #ocrCanvas {
-      width: 80px;
-      height: 16px;
+      width: 90px;
+      height: 20px;
       border: 1px solid #999;
       background: #fff;
     }
@@ -350,7 +351,6 @@
 </head>
 <body>
 
-  <!-- ★ 画面枠フラッシュ用エレメント ★ -->
   <div id="borderFlash"></div>
 
   <header>
@@ -362,7 +362,6 @@
     </div>
   </header>
 
-  <!-- 作業者表示バー -->
   <div class="worker-bar">
     <span>担当作業者: <span id="currentWorkerDisplay" style="color:#d32f2f;">未登録</span></span>
     <button class="worker-btn" onclick="openModal('workerModal')">作業者切替</button>
@@ -386,14 +385,13 @@
 
       <video id="ocrVideo" playsinline autoplay muted style="display:none;"></video>
       <div class="ocr-scan-box" id="ocrScanBox" style="display:none;">
-        <span class="guide-text">枠内に文字を合わせてください</span>
+        <span class="guide-text">枠内に文字を合わせてください (1.8倍ズーム)</span>
         <span id="ocrLivePreview" style="font-size:0.75rem; color:#ffeb3b; background:transparent;"></span>
       </div>
 
       <button class="btn btn-reset" style="position:absolute; top:6px; right:6px; z-index:30; padding:4px 10px; font-size:0.75rem;" onclick="stopAllCameras()">カメラ停止</button>
     </div>
 
-    <!-- 読取位置確認用（プレビューバー） -->
     <div class="crop-preview-box" id="cropPreviewContainer" style="display:none;">
       <span>読取中心部:</span>
       <canvas id="ocrCanvas"></canvas>
@@ -432,7 +430,6 @@
     <div class="sub">画面をタップして次の照合へ</div>
   </div>
 
-  <!-- 作業者登録モーダル -->
   <div class="modal" id="workerModal">
     <div class="modal-content">
       <h3>作業者ID登録</h3>
@@ -445,12 +442,10 @@
     </div>
   </div>
 
-  <!-- マスタ設定モーダル -->
   <div class="modal" id="settingModal">
     <div class="modal-content">
       <h3>マスタファイル・読取設定</h3>
 
-      <!-- ★ QR桁数制限設定 UI ★ -->
       <div>
         <label style="font-weight:bold; font-size:0.9rem; color:var(--primary);">QRコード読取桁数制限 (先頭からの桁数):</label>
         <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
@@ -508,6 +503,9 @@
     let isOcrProcessing = false;
     let ocrWorker = null;
 
+    // ★ 倍率設定 (1.8倍拡大) ★
+    const OCR_ZOOM_RATIO = 1.8;
+
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function playBeep(freq, duration, type = 'sine') {
@@ -525,7 +523,6 @@
       } catch (e) {}
     }
 
-    // ★ 画面枠フラッシュ制御 ★
     function flashScreenBorder(type) {
       const flashEl = document.getElementById('borderFlash');
       flashEl.className = type === 'OK' ? 'flash-ok' : 'flash-ng';
@@ -555,7 +552,6 @@
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
     }
 
-    // --- 作業者ID管理 ---
     function saveWorkerId() {
       const input = document.getElementById('workerInput');
       const val = input.value.trim();
@@ -579,7 +575,6 @@
       }
     }
 
-    // --- 入力制御 ---
     const scanInput = document.getElementById('scanInput');
     scanInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -614,7 +609,6 @@
       scanInput.value = '';
     }
 
-    // --- 照合ロジック ---
     function processScan(code) {
       code = code.trim();
       if (!code) return;
@@ -779,6 +773,7 @@
       if (ocrVideo) {
         ocrVideo.srcObject = null;
         ocrVideo.pause();
+        ocrVideo.style.transform = 'none';
       }
 
       if (html5QrCode) {
@@ -802,7 +797,6 @@
       keepFocus();
     }
 
-    // --- QRコード桁数制限処理 ---
     function formatQrCode(rawCode) {
       const limit = parseInt(localStorage.getItem('pokayoke_qr_limit') || '0', 10);
       if (limit > 0 && rawCode.length > limit) {
@@ -822,7 +816,6 @@
       }
     }
 
-    // --- バーコード/QR ---
     async function startLiveBarcodeScan() {
       await stopAllCameras();
       scanInput.blur();
@@ -862,7 +855,6 @@
       });
     }
 
-    // --- 大津の自動二値化 ---
     function getOtsuThreshold(grayData) {
       const hist = new Array(256).fill(0);
       const total = grayData.length;
@@ -896,7 +888,6 @@
       return threshold;
     }
 
-    // --- OCR ---
     async function initOcrWorker() {
       if (!ocrWorker) {
         document.getElementById('statusBanner').textContent = 'OCRエンジンを準備中...';
@@ -907,6 +898,9 @@
         });
       }
     }
+
+    // ★ OCR起動（カメラズーム適用） ★
+    let isHardwareZoomApplied = false;
 
     async function startLiveOCRScan() {
       await stopAllCameras();
@@ -927,16 +921,29 @@
         ocrStream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: 'environment', 
-            width: { ideal: 1280 }, 
-            height: { ideal: 960 }
+            width: { ideal: 1920 }, 
+            height: { ideal: 1440 }
           },
           audio: false
         });
         ocrVideo.srcObject = ocrStream;
         await ocrVideo.play();
 
+        // 1. ハードウェアズーム対応確認・適用
+        const track = ocrStream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+        if (capabilities.zoom) {
+          const targetZoom = Math.min(OCR_ZOOM_RATIO, capabilities.zoom.max);
+          await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
+          isHardwareZoomApplied = true;
+        } else {
+          // ハードウェアズーム非対応時はCSSでデジタル拡大
+          isHardwareZoomApplied = false;
+          ocrVideo.style.transform = `scale(${OCR_ZOOM_RATIO})`;
+        }
+
         await initOcrWorker();
-        document.getElementById('statusBanner').textContent = '緑枠内に文字を合わせてください (連続読取中)';
+        document.getElementById('statusBanner').textContent = '緑枠内に文字を合わせてください (倍率UP)';
 
         ocrTimer = setInterval(captureAndRecognizeFrame, 400);
       } catch (err) {
@@ -945,7 +952,7 @@
       }
     }
 
-    // ★ 狭めた枠（高さ約11%：34px相当）に合わせて中心からジャストクロップ ★
+    // ★ ズーム倍率を考慮した中央ジャストクロップ＆大津の二値化 ★
     async function captureAndRecognizeFrame() {
       if (isOcrProcessing || !ocrStream || isCoolDown) return;
 
@@ -955,18 +962,21 @@
 
       isOcrProcessing = true;
 
-      const cropWidth = Math.floor(video.videoWidth * 0.75);
-      const cropHeight = Math.floor(video.videoHeight * 0.11);
+      // デジタルズーム時は切り抜き元の幅・高さをズーム比率で割って中央部を切り抜く
+      const zoomFactor = isHardwareZoomApplied ? 1.0 : OCR_ZOOM_RATIO;
+      const cropWidth = Math.floor((video.videoWidth * 0.75) / zoomFactor);
+      const cropHeight = Math.floor((video.videoHeight * 0.11) / zoomFactor);
       const startX = Math.floor((video.videoWidth - cropWidth) / 2);
       const startY = Math.floor((video.videoHeight - cropHeight) / 2);
 
-      canvas.width = cropWidth;
-      canvas.height = cropHeight;
+      // OCR認識精度向上のため、Canvasは高解像度（2倍）で描画
+      canvas.width = cropWidth * 2;
+      canvas.height = cropHeight * 2;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      ctx.drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+      ctx.drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
 
-      const imgData = ctx.getImageData(0, 0, cropWidth, cropHeight);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imgData.data;
       const grayArr = new Uint8Array(d.length / 4);
 
@@ -1007,7 +1017,6 @@
       }
     }
 
-    // --- CSV読み込み ---
     document.getElementById('csvFileInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -1049,7 +1058,6 @@
       closeModal('settingModal');
     }
 
-    // Googleドライブ同期
     async function syncGDrive() {
       const url = document.getElementById('gdriveUrl').value.trim();
       if (!url) return alert('URLを入力してください');
@@ -1070,7 +1078,6 @@
       }
     }
 
-    // --- 照合ログ管理（作業者ID追加） ---
     function addLog(parent, child, result) {
       const logs = JSON.parse(localStorage.getItem('pokayoke_logs') || '[]');
       const now = new Date().toLocaleString();
@@ -1106,7 +1113,6 @@
       }
     }
 
-    // --- モーダル制御 ---
     function openModal(id) {
       document.getElementById(id).style.display = 'flex';
       if (id === 'logModal') renderLogs();
